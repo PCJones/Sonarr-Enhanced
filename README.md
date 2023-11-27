@@ -1,4 +1,9 @@
-# <img width="24px" src="./Logo/256.png" alt="Sonarr"></img> Sonarr 
+# <img width="24px" src="./Logo/256.png" alt="Sonarr"></img> Sonarr-Enhanced 
+
+A fork of Sonarr with some features and fixes for Usenet Users and the German Scene.
+
+
+# Sonarr:
 
 Sonarr is a PVR for Usenet and BitTorrent users. It can monitor multiple RSS feeds for new episodes of your favorite shows and will grab, sort and rename them. It can also be configured to automatically upgrade the quality of files already downloaded when a better quality format becomes available.
 
