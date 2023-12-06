@@ -1,6 +1,6 @@
 # <img width="24px" src="./Logo/256.png" alt="Sonarr"></img> Sonarr-Enhanced 
 
-A fork of Sonarr with some features and fixes for Usenet Users and the German Scene.
+A fork of Sonarr with some features and fixes for Usenet Users and non-English releases. Currently focused on the German Scene but I'm open to Issues/PRs that help other languages.
 
 
 # Sonarr:
