@@ -1,0 +1,54 @@
+name: Create PR for Upstream Releases
+
+on:
+  schedule:
+    # Run this workflow daily at 00:00 UTC
+    - cron: '0 0 * * *'
+
+jobs:
+  create-pull-request:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0 # Fetch all history for all tags and branches
+
+      - name: Configure Git
+        run: |
+          git config --global user.name 'PCJones'
+          git config --global user.email '377223+PCJones@users.noreply.github.com'
+
+      - name: Fetch tags from upstream
+        run: |
+          git remote add upstream https://github.com/Sonarr/Sonarr.git
+          git fetch upstream --tags
+
+      - name: Get latest tag from upstream
+        id: upstream
+        run: |
+          echo "UPSTREAM_TAG=$(git describe --tags `git rev-list --tags --max-count=1`)" >> $GITHUB_ENV
+          echo "Latest upstream tag: ${{ env.UPSTREAM_TAG }}"
+
+      - name: Create branch for PR
+        run: |
+          git checkout -b update-to-${{ env.UPSTREAM_TAG }}
+
+      - name: Merge upstream changes
+        run: |
+          git merge ${{ env.UPSTREAM_TAG }}
+
+      - name: Push changes
+        run: |
+          git push origin update-to-${{ env.UPSTREAM_TAG }}
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: Update to ${{ env.UPSTREAM_TAG }}
+          title: Merge upstream release ${{ env.UPSTREAM_TAG }}
+          body: Updating to the latest release of Sonarr.
+          branch: update-to-${{ env.UPSTREAM_TAG }}
+          labels: automated-pr
