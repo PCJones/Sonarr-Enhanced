@@ -22,7 +22,7 @@ namespace NzbDrone.Core.MediaFiles.MediaInfo
         private readonly List<FFProbePixelFormat> _pixelFormats;
 
         public const int MINIMUM_MEDIA_INFO_SCHEMA_REVISION = 8;
-        public const int CURRENT_MEDIA_INFO_SCHEMA_REVISION = 8;
+        public const int CURRENT_MEDIA_INFO_SCHEMA_REVISION = 9;
 
         private static readonly string[] ValidHdrColourPrimaries = { "bt2020" };
         private static readonly string[] HlgTransferFunctions = { "bt2020-10", "arib-std-b67" };
@@ -188,12 +188,14 @@ namespace NzbDrone.Core.MediaFiles.MediaInfo
 
             if (TryGetSideData<DoviConfigurationRecordSideData>(sideData, out var dovi))
             {
+                var hasHdr10Plus = TryGetSideData<HdrDynamicMetadataSpmte2094>(sideData, out _);
+
                 return dovi.DvBlSignalCompatibilityId switch
                 {
-                    1 => HdrFormat.DolbyVisionHdr10,
+                    1 => hasHdr10Plus ? HdrFormat.DolbyVisionHdr10Plus : HdrFormat.DolbyVisionHdr10,
                     2 => HdrFormat.DolbyVisionSdr,
                     4 => HdrFormat.DolbyVisionHlg,
-                    6 => HdrFormat.DolbyVisionHdr10,
+                    6 => hasHdr10Plus ? HdrFormat.DolbyVisionHdr10Plus : HdrFormat.DolbyVisionHdr10,
                     _ => HdrFormat.DolbyVision
                 };
             }

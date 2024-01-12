@@ -19,11 +19,14 @@ namespace NzbDrone.Core.Parser
                 new RegexReplace(@".*?[_. ](S\d{2}(?:E\d{2,4})*[_. ].*)", "$1", RegexOptions.Compiled | RegexOptions.IgnoreCase)
             };
 
-        private static readonly Regex LanguageRegex = new Regex(@"(?:\W|_)(?<english>\b(?:ing|eng)\b)|(?<italian>\b(?:ita|italian)\b)|(?<german>german\b|videomann|ger[. ]dub)|(?<flemish>flemish)|(?<greek>greek)|(?<french>(?:\W|_)(?:FR|VF|VF2|VFF|VFQ|TRUEFRENCH)(?:\W|_))|(?<russian>\brus\b)|(?<hungarian>\b(?:HUNDUB|HUN)\b)|(?<hebrew>\bHebDub\b)|(?<polish>\b(?:PL\W?DUB|DUB\W?PL|LEK\W?PL|PL\W?LEK)\b)|(?<chinese>\[(?:CH[ST]|BIG5|GB)\]|简|繁|字幕)|(?<bulgarian>\bbgaudio\b)|(?<spanish>\b(?:español|castellano|esp|spa(?!\(Latino\)))\b)|(?<ukrainian>\b(?:ukr)\b)|(?<thai>\b(?:THAI)\b)|(?<romanian>\b(?:RoDubbed|ROMANIAN)\b)|(?<catalan>[-,. ]cat[. ](?:DD|subs)|\b(?:catalan|catalán)\b)",
+        private static readonly Regex LanguageRegex = new Regex(@"(?:\W|_)(?<english>\b(?:ing|eng)\b)|(?<italian>\b(?:ita|italian)\b)|(?<german>german\b|videomann|ger[. ]dub)|(?<flemish>flemish)|(?<greek>greek)|(?<french>(?:\W|_)(?:FR|VF|VF2|VFF|VFQ|TRUEFRENCH)(?:\W|_))|(?<russian>\b(?:rus|ru)\b)|(?<hungarian>\b(?:HUNDUB|HUN)\b)|(?<hebrew>\bHebDub\b)|(?<polish>\b(?:PL\W?DUB|DUB\W?PL|LEK\W?PL|PL\W?LEK)\b)|(?<chinese>\[(?:CH[ST]|BIG5|GB)\]|简|繁|字幕)|(?<bulgarian>\bbgaudio\b)|(?<spanish>\b(?:español|castellano|esp|spa(?!\(Latino\)))\b)|(?<ukrainian>\b(?:ukr)\b)|(?<thai>\b(?:THAI)\b)|(?<romanian>\b(?:RoDubbed|ROMANIAN)\b)|(?<catalan>[-,. ]cat[. ](?:DD|subs)|\b(?:catalan|catalán)\b)|(?<latvian>\b(?:lat|lav|lv)\b)",
                                                                 RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
         private static readonly Regex CaseSensitiveLanguageRegex = new Regex(@"(?:(?i)(?<!SUB[\W|_|^]))(?:(?<lithuanian>\bLT\b)|(?<czech>\bCZ\b)|(?<polish>\bPL\b)|(?<bulgarian>\bBG\b)|(?<slovak>\bSK\b))(?:(?i)(?![\W|_|^]SUB))",
                                                                 RegexOptions.Compiled);
+
+        private static readonly Regex GermanDualLanguageRegex = new (@"(?<!WEB[-_. ]?)\bDL\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+        private static readonly Regex GermanMultiLanguageRegex = new (@"\bML\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
         private static readonly Regex SubtitleLanguageRegex = new Regex(".+?[-_. ](?<iso_code>[a-z]{2,3})([-_. ](?<tags>full|forced|foreign|default|cc|psdh|sdh))*$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
@@ -171,6 +174,11 @@ namespace NzbDrone.Core.Parser
                 languages.Add(Language.SpanishLatino);
             }
 
+            if (lowerTitle.Contains("latvian"))
+            {
+                languages.Add(Language.Latvian);
+            }
+
             var regexLanguages = RegexLanguage(title);
 
             if (regexLanguages.Any())
@@ -186,6 +194,21 @@ namespace NzbDrone.Core.Parser
             if (!languages.Any())
             {
                 languages.Add(Language.Unknown);
+            }
+
+            if (languages.Count == 1 && languages.Single() == Language.German)
+            {
+                if (GermanDualLanguageRegex.IsMatch(title))
+                {
+                    Logger.Trace("Adding original language because the release title contains German DL tag");
+                    languages.Add(Language.Original);
+                }
+                else if (GermanMultiLanguageRegex.IsMatch(title))
+                {
+                    Logger.Trace("Adding original language and English because the release title contains German ML tag");
+                    languages.Add(Language.Original);
+                    languages.Add(Language.English);
+                }
             }
 
             return languages.DistinctBy(l => (int)l).ToList();
@@ -232,7 +255,7 @@ namespace NzbDrone.Core.Parser
             {
                 var simpleFilename = Path.GetFileNameWithoutExtension(fileName);
                 var match = SubtitleLanguageRegex.Match(simpleFilename);
-                var languageTags = match.Groups["tags"].Captures.Cast<Capture>()
+                var languageTags = match.Groups["tags"].Captures
                     .Where(tag => !tag.Value.Empty())
                     .Select(tag => tag.Value.ToLower());
                 return languageTags.ToList();
@@ -252,27 +275,27 @@ namespace NzbDrone.Core.Parser
             // Case sensitive
             var caseSensitiveMatch = CaseSensitiveLanguageRegex.Match(title);
 
-            if (caseSensitiveMatch.Groups["lithuanian"].Captures.Cast<Capture>().Any())
+            if (caseSensitiveMatch.Groups["lithuanian"].Captures.Any())
             {
                 languages.Add(Language.Lithuanian);
             }
 
-            if (caseSensitiveMatch.Groups["czech"].Captures.Cast<Capture>().Any())
+            if (caseSensitiveMatch.Groups["czech"].Captures.Any())
             {
                 languages.Add(Language.Czech);
             }
 
-            if (caseSensitiveMatch.Groups["polish"].Captures.Cast<Capture>().Any())
+            if (caseSensitiveMatch.Groups["polish"].Captures.Any())
             {
                 languages.Add(Language.Polish);
             }
 
-            if (caseSensitiveMatch.Groups["bulgarian"].Captures.Cast<Capture>().Any())
+            if (caseSensitiveMatch.Groups["bulgarian"].Captures.Any())
             {
                 languages.Add(Language.Bulgarian);
             }
 
-            if (caseSensitiveMatch.Groups["slovak"].Captures.Cast<Capture>().Any())
+            if (caseSensitiveMatch.Groups["slovak"].Captures.Any())
             {
                 languages.Add(Language.Slovak);
             }
@@ -287,22 +310,22 @@ namespace NzbDrone.Core.Parser
                     languages.Add(Language.English);
                 }
 
-                if (match.Groups["italian"].Captures.Cast<Capture>().Any())
+                if (match.Groups["italian"].Captures.Any())
                 {
                     languages.Add(Language.Italian);
                 }
 
-                if (match.Groups["german"].Captures.Cast<Capture>().Any())
+                if (match.Groups["german"].Captures.Any())
                 {
                     languages.Add(Language.German);
                 }
 
-                if (match.Groups["flemish"].Captures.Cast<Capture>().Any())
+                if (match.Groups["flemish"].Captures.Any())
                 {
                     languages.Add(Language.Flemish);
                 }
 
-                if (match.Groups["greek"].Captures.Cast<Capture>().Any())
+                if (match.Groups["greek"].Captures.Any())
                 {
                     languages.Add(Language.Greek);
                 }
@@ -370,6 +393,11 @@ namespace NzbDrone.Core.Parser
                 if (match.Groups["catalan"].Success)
                 {
                     languages.Add(Language.Catalan);
+                }
+
+                if (match.Groups["latvian"].Success)
+                {
+                    languages.Add(Language.Latvian);
                 }
             }
 

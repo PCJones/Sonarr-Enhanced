@@ -5,6 +5,7 @@ using FluentValidation.Results;
 using NLog;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Common.Http;
+using NzbDrone.Core.Localization;
 using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.MediaFiles.MediaInfo;
 using NzbDrone.Core.Notifications.Trakt.Resource;
@@ -18,12 +19,14 @@ namespace NzbDrone.Core.Notifications.Trakt
     {
         private readonly ITraktProxy _proxy;
         private readonly INotificationRepository _notificationRepository;
+        private readonly ILocalizationService _localizationService;
         private readonly Logger _logger;
 
-        public Trakt(ITraktProxy proxy, INotificationRepository notificationRepository, Logger logger)
+        public Trakt(ITraktProxy proxy, INotificationRepository notificationRepository, ILocalizationService localizationService, Logger logger)
         {
             _proxy = proxy;
             _notificationRepository = notificationRepository;
+            _localizationService = localizationService;
             _logger = logger;
         }
 
@@ -70,20 +73,20 @@ namespace NzbDrone.Core.Notifications.Trakt
                 {
                     _logger.Error(ex, "Access Token is invalid: " + ex.Message);
 
-                    failures.Add(new ValidationFailure("Token", "Access Token is invalid"));
+                    failures.Add(new ValidationFailure("Token", _localizationService.GetLocalizedString("NotificationsValidationInvalidAccessToken")));
                 }
                 else
                 {
                     _logger.Error(ex, "Unable to send test message: " + ex.Message);
 
-                    failures.Add(new ValidationFailure("Token", "Unable to send test message"));
+                    failures.Add(new ValidationFailure("Token", _localizationService.GetLocalizedString("NotificationsValidationUnableToSendTestMessage", new Dictionary<string, object> { { "exceptionMessage", ex.Message } })));
                 }
             }
             catch (Exception ex)
             {
                 _logger.Error(ex, "Unable to send test message: " + ex.Message);
 
-                failures.Add(new ValidationFailure("", "Unable to send test message"));
+                failures.Add(new ValidationFailure("", _localizationService.GetLocalizedString("NotificationsValidationUnableToSendTestMessage", new Dictionary<string, object> { { "exceptionMessage", ex.Message } })));
             }
 
             return new ValidationResult(failures);
@@ -160,6 +163,7 @@ namespace NzbDrone.Core.Notifications.Trakt
             };
 
             var traktResolution = MapResolution(episodeFile.Quality.Quality.Resolution, episodeFile.MediaInfo?.ScanType);
+            var hdr = MapHdr(episodeFile);
             var mediaType = MapMediaType(episodeFile.Quality.Quality.Source);
             var audio = MapAudio(episodeFile);
             var audioChannels = MapAudioChannels(episodeFile, audio);
@@ -173,6 +177,7 @@ namespace NzbDrone.Core.Notifications.Trakt
                     Number = episode.EpisodeNumber,
                     CollectedAt = DateTime.Now,
                     Resolution = traktResolution,
+                    Hdr = hdr,
                     MediaType = mediaType,
                     AudioChannels = audioChannels,
                     Audio = audio,
@@ -284,120 +289,78 @@ namespace NzbDrone.Core.Notifications.Trakt
 
         private string MapMediaType(QualitySource source)
         {
-            var traktSource = string.Empty;
-
-            switch (source)
+            var traktSource = source switch
             {
-                case QualitySource.Web:
-                case QualitySource.WebRip:
-                    traktSource = "digital";
-                    break;
-                case QualitySource.BlurayRaw:
-                case QualitySource.Bluray:
-                    traktSource = "bluray";
-                    break;
-                case QualitySource.Television:
-                case QualitySource.TelevisionRaw:
-                    traktSource = "vhs";
-                    break;
-                case QualitySource.DVD:
-                    traktSource = "dvd";
-                    break;
-            }
+                QualitySource.Web => "digital",
+                QualitySource.WebRip => "digital",
+                QualitySource.BlurayRaw => "bluray",
+                QualitySource.Bluray => "bluray",
+                QualitySource.Television => "vhs",
+                QualitySource.TelevisionRaw => "vhs",
+                QualitySource.DVD => "dvd",
+                _ => string.Empty
+            };
 
             return traktSource;
         }
 
         private string MapResolution(int resolution, string scanType)
         {
-            var traktResolution = string.Empty;
+            var scanIdentifier = scanType.IsNotNullOrWhiteSpace() && TraktInterlacedTypes.InterlacedTypes.Contains(scanType) ? "i" : "p";
 
-            // var interlacedTypes = new string[] { "Interlaced", "MBAFF", "PAFF" };
-            var scanIdentifier = scanType.IsNotNullOrWhiteSpace() && TraktInterlacedTypes.interlacedTypes.Contains(scanType) ? "i" : "p";
-
-            switch (resolution)
+            var traktResolution = resolution switch
             {
-                case 2160:
-                    traktResolution = "uhd_4k";
-                    break;
-                case 1080:
-                    traktResolution = $"hd_1080{scanIdentifier}";
-                    break;
-                case 720:
-                    traktResolution = "hd_720p";
-                    break;
-                case 576:
-                    traktResolution = $"sd_576{scanIdentifier}";
-                    break;
-                case 480:
-                    traktResolution = $"sd_480{scanIdentifier}";
-                    break;
-            }
+                2160 => "uhd_4k",
+                1080 => $"hd_1080{scanIdentifier}",
+                720 => "hd_720p",
+                576 => $"sd_576{scanIdentifier}",
+                480 => $"sd_480{scanIdentifier}",
+                _ => string.Empty
+            };
 
             return traktResolution;
         }
 
+        private string MapHdr(EpisodeFile episodeFile)
+        {
+            var traktHdr = episodeFile.MediaInfo?.VideoHdrFormat switch
+            {
+                HdrFormat.DolbyVision or HdrFormat.DolbyVisionSdr => "dolby_vision",
+                HdrFormat.Hdr10 or HdrFormat.DolbyVisionHdr10 => "hdr10",
+                HdrFormat.Hdr10Plus or HdrFormat.DolbyVisionHdr10Plus => "hdr10_plus",
+                HdrFormat.Hlg10 or HdrFormat.DolbyVisionHlg => "hlg",
+                _ => null
+            };
+
+            return traktHdr;
+        }
+
         private string MapAudio(EpisodeFile episodeFile)
         {
-            var traktAudioFormat = string.Empty;
-
             var audioCodec = episodeFile.MediaInfo != null ? MediaInfoFormatter.FormatAudioCodec(episodeFile.MediaInfo, episodeFile.SceneName) : string.Empty;
 
-            switch (audioCodec)
+            var traktAudioFormat = audioCodec switch
             {
-                case "AC3":
-                    traktAudioFormat = "dolby_digital";
-                    break;
-                case "EAC3":
-                    traktAudioFormat = "dolby_digital_plus";
-                    break;
-                case "TrueHD":
-                    traktAudioFormat = "dolby_truehd";
-                    break;
-                case "EAC3 Atmos":
-                    traktAudioFormat = "dolby_digital_plus_atmos";
-                    break;
-                case "TrueHD Atmos":
-                    traktAudioFormat = "dolby_atmos";
-                    break;
-                case "DTS":
-                case "DTS-ES":
-                    traktAudioFormat = "dts";
-                    break;
-                case "DTS-HD MA":
-                    traktAudioFormat = "dts_ma";
-                    break;
-                case "DTS-HD HRA":
-                    traktAudioFormat = "dts_hr";
-                    break;
-                case "DTS-X":
-                    traktAudioFormat = "dts_x";
-                    break;
-                case "MP3":
-                    traktAudioFormat = "mp3";
-                    break;
-                case "MP2":
-                    traktAudioFormat = "mp2";
-                    break;
-                case "Vorbis":
-                    traktAudioFormat = "ogg";
-                    break;
-                case "WMA":
-                    traktAudioFormat = "wma";
-                    break;
-                case "AAC":
-                    traktAudioFormat = "aac";
-                    break;
-                case "PCM":
-                    traktAudioFormat = "lpcm";
-                    break;
-                case "FLAC":
-                    traktAudioFormat = "flac";
-                    break;
-                case "Opus":
-                    traktAudioFormat = "ogg_opus";
-                    break;
-            }
+                "AC3" => "dolby_digital",
+                "EAC3" => "dolby_digital_plus",
+                "TrueHD" => "dolby_truehd",
+                "EAC3 Atmos" => "dolby_digital_plus_atmos",
+                "TrueHD Atmos" => "dolby_atmos",
+                "DTS" => "dts",
+                "DTS-ES" => "dts",
+                "DTS-HD MA" => "dts_ma",
+                "DTS-HD HRA" => "dts_hr",
+                "DTS-X" => "dts_x",
+                "MP3" => "mp3",
+                "MP2" => "mp2",
+                "Vorbis" => "ogg",
+                "WMA" => "wma",
+                "AAC" => "aac",
+                "PCM" => "lpcm",
+                "FLAC" => "flac",
+                "Opus" => "ogg_opus",
+                _ => string.Empty
+            };
 
             return traktAudioFormat;
         }
