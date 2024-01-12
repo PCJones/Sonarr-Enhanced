@@ -52,4 +52,5 @@ jobs:
           title: Merge upstream release ${{ env.UPSTREAM_TAG }}
           body: Updating to the latest release of Sonarr.
           branch: update-to-${{ env.UPSTREAM_TAG }}
+          base: develop
           labels: automated-pr
