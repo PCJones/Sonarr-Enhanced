@@ -4,6 +4,7 @@ on:
   schedule:
     # Run this workflow daily at 00:00 UTC
     - cron: '0 0 * * *'
+  workflow_dispatch:
 
 jobs:
   create-pull-request:
