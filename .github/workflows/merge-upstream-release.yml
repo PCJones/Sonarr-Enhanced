@@ -51,7 +51,7 @@ jobs:
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v3
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.WORKFLOW_PAT }}
           commit-message: Update to ${{ env.UPSTREAM_TAG }}
           title: Merge upstream release ${{ env.UPSTREAM_TAG }}
           body: Updating to the latest release of Sonarr.
