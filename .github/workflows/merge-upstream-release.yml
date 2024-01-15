@@ -6,6 +6,10 @@ on:
     - cron: '0 0 * * *'
   workflow_dispatch:
 
+permissions:
+  contents: write
+  actions: write
+
 jobs:
   create-pull-request:
     runs-on: ubuntu-latest
