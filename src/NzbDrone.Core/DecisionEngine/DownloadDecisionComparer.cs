@@ -12,6 +12,8 @@ namespace NzbDrone.Core.DecisionEngine
 {
     public class DownloadDecisionComparer : IComparer<DownloadDecision>
     {
+        private static readonly string[] IgnoredStrings = new string[] { "-xpost" };
+
         private readonly IConfigService _configService;
         private readonly IDelayProfileService _delayProfileService;
         private readonly IQualityDefinitionService _qualityDefinitionService;
@@ -156,33 +158,48 @@ namespace NzbDrone.Core.DecisionEngine
                 return 0;
             }
 
-            return CompareBy(x.RemoteEpisode, y.RemoteEpisode, remoteEpisode =>
+            var sanitizedTitleX = SanitizeReleaseName(x.RemoteEpisode.Release.Title);
+            var sanitizedTitleY = SanitizeReleaseName(y.RemoteEpisode.Release.Title);
+
+            var titlesMatch = string.Equals(sanitizedTitleX, sanitizedTitleY, StringComparison.OrdinalIgnoreCase);
+            var sizesMatch = GetRoundedSize(x.RemoteEpisode.Release.Size) == GetRoundedSize(y.RemoteEpisode.Release.Size);
+
+            if (titlesMatch && sizesMatch)
             {
-                var ageHours = remoteEpisode.Release.AgeHours;
-                var age = remoteEpisode.Release.Age;
-
-                if (ageHours < 1)
+                // Compare by age, as both releases have the same sanitized name and rounded size
+                return CompareByReverse(x.RemoteEpisode, y.RemoteEpisode, remoteEpisode => remoteEpisode.Release.AgeHours);
+            }
+            else
+            {
+                // Use original sorting logic if the releases are not equal
+                return CompareBy(x.RemoteEpisode, y.RemoteEpisode, remoteEpisode =>
                 {
-                    return 1000;
-                }
+                    var ageHours = remoteEpisode.Release.AgeHours;
+                    var age = remoteEpisode.Release.Age;
 
-                if (ageHours <= 24)
-                {
-                    return 100;
-                }
+                    if (ageHours < 1)
+                    {
+                        return 1000;
+                    }
 
-                if (age <= 7)
-                {
-                    return 10;
-                }
+                    if (ageHours <= 24)
+                    {
+                        return 100;
+                    }
 
-                return 1;
-            });
+                    if (age <= 7)
+                    {
+                        return 10;
+                    }
+
+                    return 1;
+                });
+            }
         }
 
         private int CompareSize(DownloadDecision x, DownloadDecision y)
         {
-            var sizeCompare =  CompareBy(x.RemoteEpisode, y.RemoteEpisode, remoteEpisode =>
+            var sizeCompare = CompareBy(x.RemoteEpisode, y.RemoteEpisode, remoteEpisode =>
             {
                 var preferredSize = _qualityDefinitionService.Get(remoteEpisode.ParsedEpisodeInfo.Quality.Quality).PreferredSize;
 
@@ -201,6 +218,41 @@ namespace NzbDrone.Core.DecisionEngine
             });
 
             return sizeCompare;
+        }
+
+        private long GetRoundedSize(long size)
+        {
+            var roundingRules = new List<(long threshold, long roundTo)>
+                {
+                    (2.5.Gigabytes(), 300.Megabytes()),
+                    (15.Gigabytes(), 800.Megabytes()),
+                    (30.Gigabytes(), 1600.Megabytes())
+                };
+
+            foreach (var (threshold, roundTo) in roundingRules)
+            {
+                if (size < threshold)
+                {
+                    return size.Round(roundTo);
+                }
+            }
+
+            return size.Round(4500.Megabytes()); // Default rounding for sizes >= 30GB
+        }
+
+        private string SanitizeReleaseName(string releaseName)
+        {
+            // Some indexers add strings like -xpost to the release which can be ignored
+
+            foreach (var ignoredString in IgnoredStrings)
+            {
+                if (releaseName.EndsWith(ignoredString, StringComparison.OrdinalIgnoreCase))
+                {
+                    return releaseName[..^ignoredString.Length].Trim();
+                }
+            }
+
+            return releaseName.Trim();
         }
     }
 }
